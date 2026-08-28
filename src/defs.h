@@ -23,13 +23,19 @@
 /////////////////////////////////////////////////////////////////////////////
 
 // Determine OS
-#define LINUX
-#ifdef WIN32
-	#undef LINUX
+#if defined(__APPLE__)
+	#define MACOS
+#elif defined(WIN32)
+	/* windows */
+#else
+	#define LINUX
 #endif
 
 // OS Specific headers
-#ifdef LINUX
+#ifdef MACOS
+	#include <sys/time.h>
+	#include <SDL.h>
+#elif defined(LINUX)
 	#include <sys/time.h>
 	#include <X11/keysym.h>
 	#include <X11/Xlib.h>
@@ -47,12 +53,18 @@
 #include <stdlib.h>
 #include <stdarg.h>
 #include <string.h>
-#include <GL/gl.h>
-#include <GL/glu.h>
+#ifdef MACOS
+	#define GL_SILENCE_DEPRECATION
+	#include <OpenGL/gl.h>
+	#include <OpenGL/glu.h>
+#else
+	#include <GL/gl.h>
+	#include <GL/glu.h>
+#endif
 #include <math.h>
 
 // OS Dependant defines
-#ifdef LINUX
+#if defined(LINUX) || defined(MACOS)
 	#define SYS_APPNAME "Konex"
 #else
 	#define SYS_APPNAME "Conex"

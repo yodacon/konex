@@ -62,9 +62,11 @@ static unsigned int getFreeImage()
 /////////////////////////////////////////////////////////////////////////////
 void vid_Init(int width, int height, bool fullscreen)
 {
-#ifdef LINUX
+#if defined(MACOS)
+	vidsdl_Init(width, height, fullscreen);
+	vidFont = vidsdl_CreateFont();
+#elif defined(LINUX)
 	vidl_Init(width, height, fullscreen);
-	//vidsdl_Init(width, height, fullscreen);
 	vidFont = vidl_CreateFont();
 #else
 	vidw_Init(width, height, fullscreen);
@@ -91,7 +93,9 @@ void vid_Init(int width, int height, bool fullscreen)
 
 void vid_SetMode(int width, int height, bool fullscreen)
 {
-#ifdef LINUX
+#if defined(MACOS)
+	vidsdl_SetMode(width, height, fullscreen);
+#elif defined(LINUX)
 	vidl_SetMode(width, height, fullscreen);
 #else
 	//vidw_SetMode(fullscreen);
@@ -266,9 +270,10 @@ void vid_PSet(int x, int y, vid_color_t color)
 
 void vid_Frame(void)
 {
-#ifdef LINUX
+#if defined(MACOS)
+	vidsdl_Swap();
+#elif defined(LINUX)
 	vidl_Swap();
-	//vidsdl_Swap();
 #else
 	vidw_Swap();
 #endif

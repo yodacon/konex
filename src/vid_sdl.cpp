@@ -22,25 +22,13 @@
 // Implementation Private Includes
 /////////////////////////////////////////////////////////////////////////////
 #include "defs.h"
-#include <SDL/SDL.h>
-
-/////////////////////////////////////////////////////////////////////////////
-// Implementation Private Definitions, Enumeration and Typedefs
-/////////////////////////////////////////////////////////////////////////////
+#include <SDL.h>
 
 /////////////////////////////////////////////////////////////////////////////
 // Implementation Private Variables
 /////////////////////////////////////////////////////////////////////////////
-SDL_Surface *surface;
-int videoFlags;
-
-/////////////////////////////////////////////////////////////////////////////
-// Interface Variables
-/////////////////////////////////////////////////////////////////////////////
-
-/////////////////////////////////////////////////////////////////////////////
-// Implementation Private Functions
-/////////////////////////////////////////////////////////////////////////////
+static SDL_Window    *sdlWindow  = NULL;
+static SDL_GLContext  sdlContext = NULL;
 
 /////////////////////////////////////////////////////////////////////////////
 // Interface Public Functions
@@ -50,74 +38,92 @@ void vidsdl_Init(int width, int height, bool fullscreen)
 	if (SDL_Init(SDL_INIT_VIDEO) < 0)
 	{
 		console_Print("VID_SDL: Video initialization failed: (%s)", SDL_GetError());
+		exit(1);
 	}
 
-    const SDL_VideoInfo *videoInfo;
+	SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+	SDL_GL_SetAttribute(SDL_GL_RED_SIZE,     8);
+	SDL_GL_SetAttribute(SDL_GL_GREEN_SIZE,   8);
+	SDL_GL_SetAttribute(SDL_GL_BLUE_SIZE,    8);
+	SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE,  24);
+	// The engine is fixed-function GL 1.x, so ask for a compatibility context.
+	SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_COMPATIBILITY);
 
-    videoInfo = SDL_GetVideoInfo();
-	
-	if (!videoInfo)
- 	{
-     	console_Print("VID_SDL: Video query failed: (%s)", SDL_GetError());
-	}
-
-    videoFlags  = SDL_OPENGL;          /* Enable OpenGL in SDL          */
-    videoFlags |= SDL_GL_DOUBLEBUFFER; /* Enable double buffering       */
-    videoFlags |= SDL_HWPALETTE;       /* Store the palette in hardware */
-    videoFlags |= SDL_RESIZABLE;       /* Enable window resizing        */
-
+	Uint32 flags = SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE;
 	if (fullscreen == true)
-		videoFlags |= SDL_FULLSCREEN;
+		flags |= SDL_WINDOW_FULLSCREEN_DESKTOP;
 
-	if (videoInfo->hw_available)
- 		videoFlags |= SDL_HWSURFACE;
-    else
- 		videoFlags |= SDL_SWSURFACE;
+	sdlWindow = SDL_CreateWindow(SYS_APPNAME,
+	                             SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+	                             width, height, flags);
+	if (!sdlWindow)
+	{
+		console_Print("VID_SDL: Window creation failed: (%s)", SDL_GetError());
+		exit(1);
+	}
 
-	if ( videoInfo->blit_hw )
- 		videoFlags |= SDL_HWACCEL;
+	sdlContext = SDL_GL_CreateContext(sdlWindow);
+	if (!sdlContext)
+	{
+		console_Print("VID_SDL: GL context creation failed: (%s)", SDL_GetError());
+		exit(1);
+	}
 
-    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+	SDL_GL_MakeCurrent(sdlWindow, sdlContext);
+	SDL_GL_SetSwapInterval(1);
+}
 
-    surface = SDL_SetVideoMode(width, height, 32, videoFlags);
+void vidsdl_SetMode(int width, int height, bool fullscreen)
+{
+	if (!sdlWindow) return;
 
-    if (!surface)
- 	{
-    	console_Print("VID_SDL: Video mode set failed: %s", SDL_GetError());
- 	}
+	SDL_SetWindowFullscreen(sdlWindow, fullscreen ? SDL_WINDOW_FULLSCREEN_DESKTOP : 0);
+	if (fullscreen == false)
+		SDL_SetWindowSize(sdlWindow, width, height);
+}
+
+// TODO(port): the X11 backend built these display lists with glXUseXFont, which
+// has no macOS equivalent. The lists are allocated and left empty so the engine
+// links and runs; text renders as nothing until a real bitmap font is uploaded.
+int vidsdl_CreateFont()
+{
+	int font = glGenLists(256);
+
+	for (int i = 0; i < 256; i++)
+	{
+		glNewList(font + i, GL_COMPILE);
+		glBitmap(0, 0, 0, 0, 8, 0, NULL);   // advance the raster pos, draw nothing
+		glEndList();
+	}
+
+	return font;
+}
+
+void vidsdl_Swap()
+{
+	SDL_GL_SwapWindow(sdlWindow);
 }
 
 void vidsdl_Main()
 {
-    SDL_Event event;
+	SDL_Event event;
 	bool done = false;
-	bool isActive;
-	while ( !done )
+
+	while (!done)
 	{
-		while (SDL_PollEvent(&event ))
-  		{
-      		switch(event.type)
-   			{
-   				case SDL_ACTIVEEVENT:
-					if (event.active.gain == 0)
-						isActive = FALSE;
-					else
-						isActive = TRUE;
+		while (SDL_PollEvent(&event))
+		{
+			switch (event.type)
+			{
+				case SDL_WINDOWEVENT:
+					if (event.window.event == SDL_WINDOWEVENT_SIZE_CHANGED)
+						vid_Resize(event.window.data1, event.window.data2);
 					break;
-				case SDL_VIDEORESIZE:
-			       surface = SDL_SetVideoMode( event.resize.w, event.resize.h, 16, videoFlags );
-       				if (!surface)
-    				{
-        				console_Print("VID_SDL: Could not get a surface after resize: %s", SDL_GetError());
-    				}
-       				vid_Resize(event.resize.w, event.resize.h);
-       				break;
-   				case SDL_KEYDOWN:
-					sysKeys[event.key.keysym.scancode] = true;
-       				//handleKeyPress( &event.key.keysym );
-       				break;
-   				case SDL_KEYUP:
-					sysKeys[event.key.keysym.scancode] = false;
+				case SDL_KEYDOWN:
+					sysKeys[event.key.keysym.scancode & 0xFF] = true;
+					break;
+				case SDL_KEYUP:
+					sysKeys[event.key.keysym.scancode & 0xFF] = false;
 					break;
 				case SDL_MOUSEMOTION:
 					sysMouseX = event.motion.x;
@@ -129,174 +135,17 @@ void vidsdl_Main()
 				case SDL_MOUSEBUTTONUP:
 					sysMouseButtons[event.button.button] = false;
 					break;
-   				case SDL_QUIT:
-       				done = TRUE;
-       				break;
-   				default:
-       				break;
+				case SDL_QUIT:
+					done = true;
+					break;
+				default:
+					break;
 			}
-  		}
+		}
 		sys_Frame();
 	}
+
+	SDL_GL_DeleteContext(sdlContext);
+	SDL_DestroyWindow(sdlWindow);
+	SDL_Quit();
 }
-
-void vidsdl_Swap()
-{
-    SDL_GL_SwapBuffers();
-}
-/*
-char *getFont(char *name)
-{
-	char **fonts;
-	int fcount;
-	char search[128];
-
-	sprintf(search, "*%s*", name);
-
-	fonts = XListFonts(sysDisplay, search, 1, &fcount);
-
-	return fonts[0];
-}
-
-int vidl_CreateFont()
-{
-	int font;
-	Cursor null_cursor;
-    XFontStruct *fixed;
-    XColor black =
-    {
-        0, 0, 0, 0, 0, 0
-    };
-   
-	font = glGenLists( 256 );
-
-	//    fixed = XLoadQueryFont(
-  	//      sysDisplay, "-misc-fixed-medium-r-*-*-20-*-*-*-*-*-*-*" );
-    //fixed = XLoadQueryFont(
-        //sysDisplay, "-Adobe-Times-Medium-R-Normal--14-100-100-100-P-74-ISO8859-1" );
-    fixed = XLoadQueryFont(sysDisplay, getFont("misc?fixed?medium?r*30"));
-
-
-    null_cursor = XCreateGlyphCursor(
-        sysDisplay, fixed->fid, fixed->fid, ' ', ' ', &black, &black );
-
-	//max_bounds.rbearing - min_bounds.lbearing
-    glXUseXFont( fixed->fid, 0, 256, font );
-
-    XFreeFont( sysDisplay, fixed );
-
-	return font;
-}
-
-void vidl_SetMode(int width, int height, bool fullscreen)
-{
-	XResizeWindow(sysDisplay, vidlWindow, width, height);
-}
-
-void vidl_Init(int width, int height, bool fullscreen)
-{
-    XSetWindowAttributes windowAttributes;
-    XVisualInfo *visualInfo = NULL;
-    Colormap colorMap;
-    GLXContext glxContext;
-    int errorBase;
-	int eventBase;
-
-    // Open a connection to the X server
-    sysDisplay = XOpenDisplay( NULL );
-
-    if( sysDisplay == NULL )
-    {
-        console_Print("glxsimple: %s\n", "could not open display");
-        exit(1);
-    }
-
-    // Make sure OpenGL's GLX extension supported
-    if( !glXQueryExtension( sysDisplay, &errorBase, &eventBase ) )
-    {
-        console_Print("glxsimple: %s\n", "X server has no OpenGL GLX extension");
-        exit(1);
-    }
-
-    // Find an appropriate visual
-
-    int doubleBufferVisual[]  =
-    {
-		GLX_RGBA,
-		GLX_DOUBLEBUFFER,
-		GLX_RED_SIZE,       8, 
-		GLX_GREEN_SIZE,     8, 
-		GLX_BLUE_SIZE,      8, 
-		GLX_DEPTH_SIZE,    24,
-		None    
-	};
-
-    // Try for the double-bufferd visual first
-    visualInfo = glXChooseVisual( sysDisplay, DefaultScreen(sysDisplay), doubleBufferVisual );
-
-    // Create an OpenGL rendering context
-    glxContext = glXCreateContext( sysDisplay, 
-                                   visualInfo, 
-                                   NULL,      // No sharing of display lists
-                                   GL_TRUE ); // Direct rendering if possible
-                           
-    if( glxContext == NULL )
-    {
-        console_Print("glxsimple: %s\n", "could not create rendering context");
-        exit(1);
-    }
-
-    // Create an X colormap since we're probably not using the default visual 
-    colorMap = XCreateColormap( sysDisplay, 
-                                RootWindow(sysDisplay, visualInfo->screen), 
-                                visualInfo->visual, 
-                                AllocNone );
-
-    windowAttributes.colormap     = colorMap;
-    windowAttributes.border_pixel = 0;
-	windowAttributes.override_redirect = fullscreen;
-    windowAttributes.event_mask   = ExposureMask           |
-                                    VisibilityChangeMask   |
-                                    KeyPressMask           |
-                                    KeyReleaseMask         |
-                                    ButtonPressMask        |
-                                    ButtonReleaseMask      |
-                                    PointerMotionMask      |
-                                    StructureNotifyMask    |
-									SubstructureRedirectMask |
-                                    SubstructureNotifyMask |
-                                    FocusChangeMask;
-    
-    // Create an X window with the selected visual
-    vidlWindow = XCreateWindow( sysDisplay, 
-                              RootWindow(sysDisplay, visualInfo->screen), 
-                              0, 0,     // x/y position of top-left outside corner of the window
-                              width, height, // Width and height of window
-                              0,        // Border width
-                              visualInfo->depth,
-                              InputOutput,
-                              visualInfo->visual,
-                              CWBorderPixel | CWColormap | CWEventMask | CWOverrideRedirect,
-                              &windowAttributes );
-
-    XSetStandardProperties( sysDisplay,
-                            vidlWindow,
-                            SYS_APPNAME,
-                            SYS_APPNAME,
-                            None,
-                            NULL, // Test
-                            0,  // Test
-                            NULL );
-
-    // Bind the rendering context to the window
-    glXMakeCurrent( sysDisplay, vidlWindow, glxContext );
-
-    // Request the X window to be displayed on the screen
-    XMapWindow( sysDisplay, vidlWindow );
-
-	if (fullscreen == true)
-	{
-		XGrabKeyboard(  sysDisplay, vidlWindow, True, GrabModeAsync, GrabModeAsync, CurrentTime );
-	}
-}
-*/

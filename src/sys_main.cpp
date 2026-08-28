@@ -70,8 +70,10 @@ void sys_Init()
 	konex_Init();
 
 	// Lauch the main function
-#ifdef WIN32
+#if defined(WIN32)
 	vidw_Main();
+#elif defined(MACOS)
+	vidsdl_Main();
 #else
 	vidl_Main();
 #endif

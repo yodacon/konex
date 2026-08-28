@@ -58,7 +58,7 @@ vgvec2 view_WorldToScreenCoord(vgvec2 *worldcoord)
 
 void view_Frame()
 {
-	if (viewPlayer > 0)
+	if (viewPlayer != NULL)
 	{
 		// Translate viewX and viewY to the center of the screen
 		viewX = viewPlayer->pos.x - vidWidth / 2;
