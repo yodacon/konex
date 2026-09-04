@@ -43,18 +43,30 @@ clean:
 distclean:
 	@rm -rf build build-release
 
-## deps    - install the macOS toolchain and libraries
+## deps    - install the toolchain and libraries (Homebrew on macOS, apk on Alpine)
 deps:
-	@command -v brew >/dev/null 2>&1 || { \
-	  echo "Homebrew is required: https://brew.sh"; exit 1; }
-	brew install cmake sdl2
-	@echo "Xcode Command Line Tools: xcode-select --install (if missing)"
+	@if command -v brew >/dev/null 2>&1; then \
+	  brew install cmake sdl2; \
+	  echo "Xcode Command Line Tools: xcode-select --install (if missing)"; \
+	elif command -v apk >/dev/null 2>&1; then \
+	  echo "Alpine: the Linux build is X11 + GLX, no SDL2 and no OpenAL."; \
+	  echo "  doas apk add build-base cmake libx11-dev mesa-dev glu-dev"; \
+	else \
+	  echo "No brew and no apk. The Linux build needs a C++ compiler, cmake,"; \
+	  echo "and the X11, OpenGL and GLU development headers."; exit 1; \
+	fi
 
 ## check   - report what the build needs and whether it is present
 check:
-	@printf '%-10s ' "clang++:"; c++ --version 2>/dev/null | head -1 || echo MISSING
+	@printf '%-10s ' "c++:";     c++ --version 2>/dev/null | head -1 || echo MISSING
 	@printf '%-10s ' "cmake:";   cmake --version 2>/dev/null | head -1 || echo MISSING
-	@printf '%-10s ' "sdl2:";    sdl2-config --version 2>/dev/null || echo MISSING
+	@if [ "$$(uname -s)" = Darwin ]; then \
+	  printf '%-10s ' "sdl2:";   sdl2-config --version 2>/dev/null || echo MISSING; \
+	else \
+	  printf '%-10s ' "x11:";    pkg-config --modversion x11 2>/dev/null || echo MISSING; \
+	  printf '%-10s ' "gl:";     pkg-config --modversion gl 2>/dev/null || echo MISSING; \
+	  printf '%-10s ' "glu:";    pkg-config --modversion glu 2>/dev/null || echo MISSING; \
+	fi
 	@printf '%-10s ' "binary:";  test -x $(BIN) && echo "$(BIN)" || echo "not built"
 
 ## help    - list targets

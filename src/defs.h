@@ -40,9 +40,17 @@
 	#include <X11/keysym.h>
 	#include <X11/Xlib.h>
 	#include <GL/glx.h>
-	#include <AL/al.h>
-	#include <AL/alu.h>
-	#include <AL/alut.h>
+	// The sound system is not built (snd_main.cpp is in no source list and
+	// its calls in sys_main.cpp are commented out), so nothing here uses
+	// OpenAL. The headers are only pulled in when a build asks for sound:
+	// alut.h in particular comes from freealut, which modern distributions
+	// (Alpine among them) no longer package, and it was failing every Linux
+	// build for a subsystem that does not exist.
+	#ifdef KONEX_SOUND
+		#include <AL/al.h>
+		#include <AL/alu.h>
+		#include <AL/alut.h>
+	#endif
 #else
 	#include <windows.h>
 #endif

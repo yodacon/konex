@@ -223,7 +223,7 @@ static void drawFPS(window *win)
 		lasttime = timer_FloatTime();
 		framecount = 0;
 
-		for (i = 0; i < resolution; i++)
+		for (i = 0; i < resolution - 1; i++)
 			fpshistory[i] = fpshistory[i+1];
 
 		fpshistory[resolution - 1] = tm_FrameTime;

@@ -38,9 +38,17 @@ if(APPLE)
     target_link_libraries(konex PRIVATE SDL2::SDL2 SDL2::SDL2main OpenGL::GL)
     target_link_libraries(konex PRIVATE "-framework OpenGL")
 elseif(UNIX)
+    # Linux: X11 + GLX, as the 2005 build was. OpenAL is off by default -- the
+    # sound system is not compiled (see defs.h) -- and freealut is not packaged
+    # on modern distributions, so linking it was failing every Linux build.
+    option(KONEX_SOUND "Include the OpenAL headers and link openal + alut" OFF)
     find_package(OpenGL REQUIRED)
     find_package(X11 REQUIRED)
-    target_link_libraries(konex PRIVATE OpenGL::GL OpenGL::GLU X11::X11 openal alut)
+    target_link_libraries(konex PRIVATE OpenGL::GL OpenGL::GLU X11::X11)
+    if(KONEX_SOUND)
+        target_compile_definitions(konex PRIVATE KONEX_SOUND)
+        target_link_libraries(konex PRIVATE openal alut)
+    endif()
 endif()
 
 # The engine resolves data paths relative to the executable, so stage dist/
